@@ -1,0 +1,288 @@
+---
+title: "Лабораторная работа 5"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("d:/Code/University/Mag_1sem/R/Labs/Fifth_lab/")
+```
+
+## Датасет за целый год
+
+### Исходные данные
+
+Рассматриваяются данные о температуре в г. Сургуте за последние 5 лет. Для этого была взята информация с сайта https://rp5.ru/Погода_в_мире  и обработа с помощью языка Python. В результате получился датасет, содержащий усредненные за день температуры. Стоит отметить, что из датасета были удалены все феврали 29, так как иначе бы нарушалась указанная переодичность в 365 дней.
+
+```{r}
+data <- read.csv("weather_grouped.csv")
+head(data, 10)
+```
+
+### Формирование временного ряда
+
+```{r}
+temperature <- ts(data$T, frequency = 365, start = c(2017, 360))
+```
+
+### График временного ряда
+
+```{r}
+plot.ts(temperature)
+```
+
+### Тест Дики-Фулера
+
+```{r}
+library(tseries)
+adf.test(temperature)
+```
+
+Нулевая гипотеза - ряд нестационарен. p-value больше 0.05, значит не отвергается нулевая теория, т.е. временной ряд нестационарен.Lag - вычисляется с использованием автокорреляционной функции и частичной автокорреляционной функции.
+
+### Создадим тренировочный и тестовый датасеты
+
+В тренировочный датасет войдет 75% исходных данных, в тестовый - 25% исходных данных.
+
+```{r}
+time <- time(temperature)
+train_percent <- 0.75
+train_size <- round(length(temperature) * train_percent)
+test_size <- length(temperature) - train_size
+train_t <- window(temperature, start=time[1], end=time[train_size])
+test_t <- window(temperature, start=time[train_size+1], end=time[length(temperature)])
+```
+
+```{r}
+plot.ts(train_t, main="Train set")
+```
+
+### Прогнозы и точность
+
+
+#### Naive
+
+```{r}
+library(forecast)
+naive_t <- naive(train_t, h=test_size)
+```
+
+```{r}
+library(knitr)
+naive_acc <- accuracy(naive_t, test_t)
+kable(naive_acc)
+```
+
+#### SNaive
+
+```{r}
+snaive_t <- snaive(train_t, h=test_size)
+snaive_acc <- accuracy(snaive_t, test_t)
+kable(snaive_acc)
+```
+#### AR
+
+```{r}
+ar_t <- arima(train_t, c(1, 0, 0))
+ar_t_pred <- predict(ar_t, n.ahead=test_size)
+ar_t_acc <- accuracy(ar_t_pred$pred, test_t)
+kable(ar_t_acc)
+```
+#### MA
+```{r}
+ma_t <- arima(train_t, c(0, 0, 1))
+ma_t_pred <- predict(ma_t, n.ahead=test_size)
+ma_t_acc <- accuracy(ma_t_pred$pred, test_t)
+kable(ma_t_acc)
+```
+
+#### ARIMA
+
+```{r}
+arima_t <- arima(train_t, c(1, 0, 1))
+arima_t_pred <- predict(arima_t, n.ahead=test_size)
+arima_t_acc <- accuracy(arima_t_pred$pred, test_t)
+kable(arima_t_acc)
+```
+
+#### SES
+
+```{r}
+ses_t <- ses(train_t, h=test_size)
+ses_acc <- accuracy(ses_t, test_t)
+kable(ses_acc)
+```
+
+#### Хольта-Винтерса
+
+```{r}
+hw <- HoltWinters(train_t)
+hw_pred <- predict(hw, n.ahead=test_size)
+hw_acc <- accuracy(hw_pred, test_t)
+kable(hw_acc)
+```
+
+### Отображение результатов
+
+```{r}
+plot.ts(test_t)
+lines(naive_t$mean, col="red")
+lines(snaive_t$mean, col="blue")
+lines(ar_t_pred$pred, col="green")
+lines(ma_t_pred$pred, col="orange")
+lines(arima_t_pred$pred, col="purple")
+lines(ses_t$mean, col="yellow")
+```
+
+#### Отображение для Хольта-Винтерса
+
+```{r}
+plot.ts(test_t)
+lines(hw_pred, col="red")
+```
+
+### Выводы
+
+Как видим, лучшие результаты получились при использовании snaive, так как он хотя бы сохраняет сезонность, в отличие от остальных моделей.
+Результаты naive и ses близки, как это можно увидеть из графика и ошибки MAE. AR, MA и ARIMA также имею схожие результаты.
+
+Стоит выделить результаты, полученные с помощью модели Хольта-Винтерса. Она смогла достичь результатов Snaive, при этом не просто повторяя значения прошлого года, а изменяя их.
+
+## Датасет за зиму
+
+### Исходные данные
+
+в качестве сезона была выбрана зима. При этом в качестве переодичности приняли 90 дней.
+
+```{r}
+season_data <- read.csv("weather_grouped_winter.csv")
+head(season_data, 10)
+```
+
+### Формирование временного ряда
+
+```{r}
+temperature_winter <- ts(season_data$T, frequency = 90, start=c(2017, 26))
+```
+
+### График временного ряда
+
+```{r}
+plot.ts(temperature_winter)
+```
+
+### Тест Дики-Фулера
+
+```{r}
+adf.test(temperature_winter)
+```
+
+Как можно было предположить, из-за того, что рассматривается один сезон, из ряда уходит сезоность. Поэтому p-value меньше 0.05, из чего следует что нулевая гипотеза отвергается - временной ряд стационарен.
+
+### Создадим тренировочный и тестовый датасеты
+
+В тренировочный датасет войдет 75% исходных данных, в тестовый - 25% исходных данных.
+
+```{r}
+time <- time(temperature_winter)
+train_percent <- 0.75
+train_size <- round(length(temperature_winter) * train_percent)
+test_size <- length(temperature_winter) - train_size
+train_t <- window(temperature_winter, start=time[1], end=time[train_size])
+test_t <- window(temperature_winter, start=time[train_size+1], end=time[length(temperature_winter)])
+```
+
+```{r}
+plot.ts(train_t, main="Train set")
+```
+
+### Прогнозы и точность
+
+#### Naive
+
+```{r}
+naive_tw <- naive(train_t, h=test_size)
+naive_acc <- accuracy(naive_tw, test_t)
+kable(naive_acc)
+```
+
+#### Snaive
+
+```{r}
+snaive_tw <- snaive(train_t, h=test_size)
+snaive_acc <- accuracy(snaive_tw, test_t)
+kable(snaive_acc)
+```
+
+#### AR
+
+```{r}
+ar_tw <- arima(train_t, c(1, 0, 0))
+ar_tw_pred <- predict(ar_tw, n.ahead=test_size)
+ar_tw_acc <- accuracy(ar_tw_pred$pred, test_t)
+kable(ar_tw_acc)
+```
+
+#### MA
+
+```{r}
+ma_tw <- arima(train_t, c(0, 0, 1))
+ma_tw_pred <- predict(ma_tw, n.ahead=test_size)
+ma_tw_acc <- accuracy(ma_tw_pred$pred, test_t)
+kable(ma_tw_acc)
+```
+
+#### ARIMA
+
+```{r}
+arima_tw <- arima(train_t, c(1, 0, 1))
+arima_tw_pred <- predict(arima_tw, n.ahead=test_size)
+arima_tw_acc <- accuracy(arima_tw_pred$pred, test_t)
+kable(arima_tw_acc)
+```
+
+#### SES
+
+```{r}
+ses_tw <- ses(train_t, h=test_size)
+ses_acc <- accuracy(ses_tw, test_t)
+kable(ses_acc)
+```
+
+#### Хольта-Винтерса
+
+```{r}
+hw <- HoltWinters(train_t)
+hw_pred <- predict(hw, n.ahead=test_size)
+hw_acc <- accuracy(hw_pred, test_t)
+kable(hw_acc)
+```
+
+### Отображение результатов
+
+```{r}
+naive_tw$mean[1]
+```
+
+```{r}
+plot.ts(test_t)
+lines(naive_tw$mean, col="red")
+lines(snaive_tw$mean, col="blue")
+lines(ar_tw_pred$pred, col="green")
+lines(ma_tw_pred$pred, col="orange")
+lines(arima_tw_pred$pred, col="purple")
+lines(ses_tw$mean, col="yellow")
+```
+
+#### Отображение для Хольта-Винтерса
+
+```{r}
+plot.ts(test_t)
+lines(hw_pred, col="red")
+```
+
+### Выводы
+
+Модели AR, MA и ARIMA приходят почти что к одним и тем же значениям. А вот модели SES и Naive предсказывают значения, котрые выходят из области значений тестового датасета, поэтому и ошибки получаются столь большими.
+
+Заметим, что модель Хольта-Винтерса так же показала не самые хорошие результаты и вышла из области значений тестового датасета.

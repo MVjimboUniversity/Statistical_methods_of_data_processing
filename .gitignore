@@ -3,3 +3,6 @@
 *.pdf
 *.gz
 *.docx
+*.html
+.Rhistory
+*.csv
